@@ -89,7 +89,7 @@ export const toolsProvider = (client: LmsClient): ToolsProvider => async (ctl) =
     executeCommandSafetyLevel = "unsafe";
   }
 
-  let currentWorkingDirectory: string = "C:\\K_KI\\AI_Output";
+  let currentWorkingDirectory: string = join(os.homedir(), ".beledarians-llm-toolbox", "workspace");
   try {
     await mkdir(currentWorkingDirectory, { recursive: true });
   } catch (error) {
