@@ -17,14 +17,22 @@ This project is a plugin for [LM Studio](https://lmstudio.ai/) that provides a r
 - [Node.js](https://nodejs.org/)
 - [LM Studio](https://lmstudio.ai/)
 
-## Installation & Usage
+## Installation
 
-This plugin is designed to be run from your local machine in development mode within LM Studio.
+You can install this plugin directly from the LM Studio Hub:
+
+[https://lmstudio.ai/beledarian/beledarians-lm-studio-tools](https://lmstudio.ai/beledarian/beledarians-lm-studio-tools)
+
+Alternatively, you can install it manually for development purposes.
+
+## Development
+
+If you want to contribute to the development of this plugin, you can follow these steps:
 
 1.  **Clone the repository:**
     ```bash
-    git clone <repository-url>
-    cd beledarians-lm-studio-tools
+    git clone https://github.com/Beledarian/Beledarians_LM_Studio_Toolbox.git
+    cd Beledarians_LM_Studio_Toolbox
     ```
 2.  **Install dependencies:**
     ```bash
