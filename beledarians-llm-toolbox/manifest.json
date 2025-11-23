@@ -2,6 +2,6 @@
   "type": "plugin",
   "runner": "node",
   "owner": "local",
-  "name": "js-code-sandbox",
+  "name": "beledarians-lm-studio-tools",
   "revision": 7
 }

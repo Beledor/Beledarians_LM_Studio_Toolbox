@@ -1,5 +1,5 @@
 {
-  "name": "lms-plugin-js-code-sandbox",
+  "name": "beledarians-lm-studio-tools",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -11,9 +11,12 @@
   "license": "ISC",
   "dependencies": {
     "@lmstudio/sdk": "1.4.0",
+    "duck-duck-scrape": "^2.2.7",
+    "puppeteer": "^24.31.0",
     "zod": "3.24.1"
   },
   "devDependencies": {
-    "@types/node": "^20.14.8"
+    "@types/node": "^20.14.8",
+    "typescript": "^5.9.3"
   }
 }
