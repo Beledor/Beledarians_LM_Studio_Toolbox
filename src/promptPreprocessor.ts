@@ -20,6 +20,23 @@ export async function promptPreprocessor(ctl: PromptPreprocessorController, user
   
   // 1. RAG / Context Injection Logic
   const history = await ctl.pullHistory();
+
+  // Check if this is the first turn (history is empty) before appending
+  let isFirstTurn = false;
+  if (Array.isArray(history)) {
+    isFirstTurn = history.length === 0;
+  } else if ("messages" in history && Array.isArray((history as any).messages)) {
+    isFirstTurn = (history as any).messages.length === 0;
+  } else if ("length" in history && typeof (history as any).length === "number") {
+    isFirstTurn = (history as any).length === 0;
+  } else {
+    // Fallback: If we can't verify, we default to assuming it's the first turn 
+    // to ensure docs are loaded at least once, but this may cause the "always load" issue
+    // if the object structure is unexpected. 
+    // However, moving this check before append() makes it much more likely to be correct.
+    isFirstTurn = true; 
+  }
+
   history.append(userMessage);
   
   const newFiles = userMessage.getFiles(ctl.client).filter(f => f.type !== "image");
@@ -52,23 +69,7 @@ export async function promptPreprocessor(ctl: PromptPreprocessorController, user
   }
 
   // 2. Tools Documentation & Memory Injection (Startup)
-  // We check the original history length (before we appended the current message)
-  // The 'history' object we have is modified, so let's pull a fresh check or calculate
-  // The 'history' variable above *includes* the appended message now.
-  // So if history.messages.length === 1, it's the first message.
-  
-  // Safely check length
-  let msgCount = 0;
-  if ('messages' in history && Array.isArray((history as any).messages)) {
-      msgCount = (history as any).messages.length;
-  } else if (Array.isArray(history)) {
-      msgCount = history.length;
-  } else {
-      // Fallback or assume 1 if we just appended
-      msgCount = 1; 
-  }
-
-  if (msgCount === 1) {
+  if (isFirstTurn) {
     let injectionContent = TOOLS_DOCUMENTATION;
 
     // Memory Injection

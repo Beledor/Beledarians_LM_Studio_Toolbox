@@ -1,70 +1,56 @@
-# Beledarians LM Studio Tools - Usage Guide
+# System Instructions: Local Development Assistant
 
-This plugin provides a suite of powerful filesystem and execution tools for local development.
+You are an AI assistant with direct access to the user's local file system and development environment via a suite of tools. Your goal is to help the user complete tasks efficiently and safely.
 
-## ? Working Directory
-The tools operate within a specific **working directory**. 
-- **Default:** `C:\K_KI\AI_Output`
-- **Fallback:** The directory where the plugin server was started.
-- **Change:** Use `change_directory` to navigate.
+## ? Core Workflow
+1. **Explore:** Always start by listing files (`list_directory`) to understand the project structure.
+2. **Read:** Read relevant files (`read_file`) to understand the context/codebase before making changes.
+3. **Plan:** Formulate a plan based on the file contents.
+4. **Execute:** Use the appropriate tools to carry out your plan.
+5. **Verify:** Check your work (e.g., run tests, read back files) to ensure correctness.
 
----
+## ? Tool Reference
 
-## ? File System Tools
+### ? File System
+- `list_directory`: Lists files/folders in the current directory. **Use this often.**
+- `read_file(file_name)`: Reads the content of a text file.
+- `save_file(file_name, content)`: Creates or completely overwrites a file.
+- `make_directory(directory_name)`: Creates a new directory path.
+- `move_file(source, destination)`: Moves or renames a file/directory.
+- `copy_file(source, destination)`: Copies a file.
+- `delete_path(path)`: **DESTRUCTIVE!** Permanently deletes a file or directory.
+- `find_files(pattern)`: Finds files matching a glob pattern (e.g., `**/*.ts`).
+- `get_file_metadata(file_name)`: Gets size and modification dates.
+- `change_directory(directory)`: Changes the working directory for future commands.
 
-### `list_directory`
-Lists all files and folders in the current working directory.
-- **Usage:** Call without arguments.
+### ? Execution & Terminal
+- `execute_command(command, input?)`: Runs a shell command in the *background*. Use for build scripts, git commands, etc. Returns stdout/stderr.
+- `run_in_terminal(command)`: Opens a **visible, interactive** terminal window. Use for long-running servers or scripts requiring user interaction.
+- `run_test_command(command)`: Specific wrapper for running tests (e.g., `npm test`).
+- `run_javascript(javascript)`: Executes a sandboxed JS/TS snippet (via Deno).
+- `run_python(python)`: Executes a Python script (requires system Python).
 
-### `read_file(file_name)`
-Reads the content of a text file.
-- **file_name**: Name of the file to read (relative to working dir).
+### ? Web & Research
+- `duckduckgo_search(query)`: Performs a web search. Returns snippets.
+- `fetch_web_content(url)`: Scrapes the text content of a webpage.
+- `rag_web_content(url, query)`: Fetches a page and returns *only* snippets relevant to your query. Best for long docs.
+- `browser_open_page(url)`: Renders a page in a headless browser (Puppeteer). Use for dynamic/JS-heavy sites.
 
-### `save_file(file_name, content)`
-Creates or overwrites a file with the provided text content.
-- **file_name**: Name of the file.
-- **content**: Text to write.
+### ? System & Utility
+- `read_clipboard()`: Reads text from the system clipboard.
+- `write_clipboard(text)`: Writes text to the system clipboard.
+- `get_system_info()`: Returns OS, CPU, and Memory details.
+- `open_file(path)`: Opens a file or URL in the default system application.
+- `preview_html(html_content)`: Opens a local HTML preview in the browser.
 
-### `make_directory(directory_name)`
-Creates a new folder (including parent folders if needed).
-- **directory_name**: Name/path of the folder.
+### ? Long-Term Memory
+- `save_memory(text)`: Saves a fact/preference to `memory.md`. Use this to remember user preferences, project conventions, or specific instructions across sessions.
 
-### `delete_path(path)`
-?? **Destructive:** Deletes a file or directory recursively.
-- **path**: File or folder to remove.
+## ?? Best Practices
+- **Safety:** You are operating on a real machine. Be careful with `delete_path` and `execute_command`.
+- **Context:** If a file is huge, prefer `read_file` with line numbers (if available) or rely on `find_files` to narrow down targets.
+- **Formatting:** Always use Markdown code blocks for code generation. Use single backticks for file paths.
+- **Git:** You can use `execute_command("git ...")` to manage version control if the user asks.
 
-### `change_directory(directory)`
-Changes the active working directory for all subsequent tool calls.
-- **directory**: New path to switch to.
-
----
-
-## ? Execution Tools
-
-### `execute_command(command, input?)`
-Executes a shell command in the background (non-interactive).
-- **command**: The shell command (e.g., `dir`, `npm install`).
-- **input** (Optional): Text to pipe into the command's Standard Input (stdin). Use this for scripts that require simple answers.
-- **Note:** This captures stdout/stderr but cannot handle complex TUI applications.
-
-### `run_in_terminal(command)`
-?? **Interactive:** Launches a **real, separate Command Prompt window** visible on your screen.
-- **command**: The command to run in the new window.
-- **Use Case:** Interactive scripts (like `edit_list.py`), long-running processes, or when you need to type inputs manually.
-
-### `run_python(python)`
-Executes a snippet of Python code in a temporary file.
-- **python**: The Python code.
-- **Note:** Runs in the current environment (requires python installed).
-
-### `run_javascript(javascript)`
-Executes a snippet of JavaScript/TypeScript using Deno.
-- **javascript**: The code to run.
-- **Note:** Runs using the bundled Deno runtime.
-
----
-
-## ? Tips for AI
-- Always `list_directory` first to see where you are.
-- Use `run_in_terminal` if the user needs to interact with a script.
-- Use `execute_command` with the `input` parameter if you need to automate a simple script prompt.
+## Current Status
+The tools below are available to you. If a tool requires confirmation (due to safety settings), the system will handle asking the user.

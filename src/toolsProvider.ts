@@ -10,23 +10,12 @@ import { getPersistedState, savePersistedState, ensureWorkspaceExists } from "./
 
 const createSafeToolImplementation = <TParameters, TReturn>(
   originalImplementation: (params: TParameters) => Promise<TReturn>,
-  safetyLevel: "secure" | "ask" | "unsafe",
+  isEnabled: boolean,
   toolName: string,
-  client: LMStudioClient, // Pass client to use client.confirm
-  ctl: any // Pass ctl for debug messages
 ) => async (params: TParameters): Promise<TReturn> => {
-  if (safetyLevel === "secure") {
-    throw new Error(`Tool '${toolName}' is disabled due to safety settings. Please ask the user to change the safety level to 'ask' or 'unsafe' in the plugin settings.`);
+  if (!isEnabled) {
+    throw new Error(`Tool '${toolName}' is disabled in the plugin settings. Please ask the user to enable 'Allow ${toolName.replace(/_/g, " ")}' (or similar) in the settings.`);
   }
-  if (safetyLevel === "ask") {
-    const confirmed = await (client as any).confirm(`Are you sure you want to run the tool '${toolName}'?`);
-    if (!confirmed) {
-      ctl.debug(`Execution of tool '${toolName}' was cancelled by the user.`);
-      throw new Error(`Execution cancelled by user.`);
-    }
-    ctl.debug(`User confirmed execution of tool '${toolName}'.`);
-  }
-  // If safetyLevel is "unsafe" or "ask" and confirmed, proceed
   return originalImplementation(params);
 };
 
@@ -84,18 +73,19 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
   // Load state using shared manager
   let { currentWorkingDirectory } = await getPersistedState();
 
-  let pythonExecutionSafetyLevel = pluginConfig.get("pythonExecutionSafetyLevel");
-  let terminalExecutionSafetyLevel = pluginConfig.get("terminalExecutionSafetyLevel");
-  let javascriptExecutionSafetyLevel = pluginConfig.get("javascriptExecutionSafetyLevel");
-  let executeCommandSafetyLevel = pluginConfig.get("executeCommandSafetyLevel");
   const allowAllCode = pluginConfig.get("allowAllCode");
+  let allowJavascript = pluginConfig.get("allowJavascriptExecution");
+  let allowPython = pluginConfig.get("allowPythonExecution");
+  let allowTerminal = pluginConfig.get("allowTerminalExecution");
+  let allowShell = pluginConfig.get("allowShellCommandExecution");
   const enableMemory = pluginConfig.get("enableMemory");
 
+  // Master override
   if (allowAllCode) {
-    pythonExecutionSafetyLevel = "unsafe";
-    terminalExecutionSafetyLevel = "unsafe";
-    javascriptExecutionSafetyLevel = "unsafe";
-    executeCommandSafetyLevel = "unsafe";
+    allowJavascript = true;
+    allowPython = true;
+    allowTerminal = true;
+    allowShell = true;
   }
 
   // Ensure the directory exists (idempotent)
@@ -169,7 +159,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
   });
   tools.push(saveMemoryTool);
 
-  const originalRunJavascriptImplementation = async ({ javascript, timeout_seconds }) => {
+  const originalRunJavascriptImplementation = async ({ javascript, timeout_seconds }: { javascript: string; timeout_seconds?: number }) => {
       const scriptFileName = `temp_script_${Date.now()}.ts`;
       const scriptFilePath = join(currentWorkingDirectory, scriptFileName);
       await writeFile(scriptFilePath, javascript, "utf-8");
@@ -250,15 +240,13 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
     parameters: { javascript: z.string(), timeout_seconds: z.number().optional() },
     implementation: createSafeToolImplementation(
       originalRunJavascriptImplementation,
-      javascriptExecutionSafetyLevel,
-      "run_javascript",
-      client,
-      ctl
+      allowJavascript,
+      "run_javascript"
     ),
   });
   tools.push(createFileTool);
 
-  const originalRunPythonImplementation = async ({ python, timeout_seconds }) => {
+  const originalRunPythonImplementation = async ({ python, timeout_seconds }: { python: string; timeout_seconds?: number }) => {
       const scriptFileName = `temp_script_${Date.now()}.py`;
       const scriptFilePath = join(currentWorkingDirectory, scriptFileName);
       await writeFile(scriptFilePath, python, "utf-8");
@@ -327,10 +315,8 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
     parameters: { python: z.string(), timeout_seconds: z.number().optional() },
     implementation: createSafeToolImplementation(
       originalRunPythonImplementation,
-      pythonExecutionSafetyLevel,
-      "run_python",
-      client,
-      ctl
+      allowPython,
+      "run_python"
     ),
   });
   tools.push(runPythonTool);
@@ -386,7 +372,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
   });
   tools.push(readFileTool);
 
-  const originalExecuteCommandImplementation = async ({ command, input, timeout_seconds }) => {
+  const originalExecuteCommandImplementation = async ({ command, input, timeout_seconds }: { command: string; input?: string; timeout_seconds?: number }) => {
       const childProcess = spawn(command, [], {
         cwd: currentWorkingDirectory,
         shell: true,
@@ -454,10 +440,8 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
     },
     implementation: createSafeToolImplementation(
       originalExecuteCommandImplementation,
-      executeCommandSafetyLevel,
-      "execute_command",
-      client,
-      ctl
+      allowShell,
+      "execute_command"
     ),
   });
   tools.push(executeCommandTool);
@@ -496,7 +480,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
   });
   tools.push(deletePathTool);
 
-  const originalRunInTerminalImplementation = async ({ command }) => {
+  const originalRunInTerminalImplementation = async ({ command }: { command: string }) => {
       if (process.platform === "win32") {
         // Windows: Use 'start' with a title to avoid ambiguity and /D for the directory.
         // The title "Terminal" ensures 'start' doesn't misinterpret the command as a title.
@@ -541,10 +525,8 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
     },
     implementation: createSafeToolImplementation(
       originalRunInTerminalImplementation,
-      terminalExecutionSafetyLevel, 
-      "run_in_terminal",
-      client,
-      ctl
+      allowTerminal, 
+      "run_in_terminal"
     ),
   });
   tools.push(runInTerminalTool);

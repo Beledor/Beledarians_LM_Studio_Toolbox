@@ -15,40 +15,25 @@ export const pluginConfigSchematics = createConfigSchematics()
     subtitle: "The minimum similarity score for a chunk to be considered relevant.",
     slider: { min: 0.0, max: 1.0, step: 0.01 },
   }, 0.5)
-  .field("codeExecutionSafetyLevel", "select", {
-    displayName: "Code Execution Safety Level",
-    subtitle: "Determines the safety level for executing code.",
-    options: ["secure", "ask", "unsafe"],
-  }, "secure")
-  .field("allowUnsafeExecution", "boolean", {
-    displayName: "Allow Unsafe Execution",
-    subtitle: "DANGER: This allows tools to execute any code, which can be very dangerous.",
-    hidden: (config: { codeExecutionSafetyLevel: string; }) => config.codeExecutionSafetyLevel !== "unsafe",
+  .field("allowJavascriptExecution", "boolean", {
+    displayName: "Allow JavaScript Execution",
+    subtitle: "Enable the 'run_javascript' tool. DANGER: Code runs on your machine.",
   }, false)
-  .field("javascriptExecutionSafetyLevel", "select", {
-    displayName: "JavaScript Execution Safety Level",
-    subtitle: "Determines the safety level for executing JavaScript code. 'secure' means disabled.",
-    options: ["secure", "ask", "unsafe"],
-  }, "secure")
-  .field("pythonExecutionSafetyLevel", "select", {
-    displayName: "Python Execution Safety Level",
-    subtitle: "Determines the safety level for executing Python code. 'secure' means disabled.",
-    options: ["secure", "ask", "unsafe"],
-  }, "secure")
-  .field("terminalExecutionSafetyLevel", "select", {
-    displayName: "Terminal Execution Safety Level",
-    subtitle: "Determines the safety level for executing terminal commands. 'secure' means disabled.",
-    options: ["secure", "ask", "unsafe"],
-  }, "secure")
-  .field("executeCommandSafetyLevel", "select", {
-    displayName: "Execute Command Safety Level",
-    subtitle: "Determines the safety level for executing shell commands. 'secure' means disabled.",
-    options: ["secure", "ask", "unsafe"],
-  }, "secure")
+  .field("allowPythonExecution", "boolean", {
+    displayName: "Allow Python Execution",
+    subtitle: "Enable the 'run_python' tool. DANGER: Code runs on your machine.",
+  }, false)
+  .field("allowTerminalExecution", "boolean", {
+    displayName: "Allow Terminal Execution",
+    subtitle: "Enable the 'run_in_terminal' tool. Opens real terminal windows.",
+  }, false)
+  .field("allowShellCommandExecution", "boolean", {
+    displayName: "Allow Shell Command Execution",
+    subtitle: "Enable the 'execute_command' tool. DANGER: Commands run on your machine.",
+  }, false)
   .field("allowAllCode", "boolean", {
-    displayName: "Allow All Code",
-    subtitle: "DANGER: This overrides all other safety settings to allow all code execution.",
-    hidden: (config: { codeExecutionSafetyLevel: string; }) => config.codeExecutionSafetyLevel !== "unsafe",
+    displayName: "Allow All Code Execution",
+    subtitle: "MASTER SWITCH: Overrides all other settings to enable ALL execution tools.",
   }, false)
   .field("searchApiKey", "string", {
     displayName: "Search API Key",
