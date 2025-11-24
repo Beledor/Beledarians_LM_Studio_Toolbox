@@ -1,4 +1,4 @@
-import { text, tool, type Tool, type ToolsProvider, type LMStudioClient } from "@lmstudio/sdk";
+﻿import { text, tool, type Tool, type ToolsProvider, type LMStudioClient } from "@lmstudio/sdk";
 import { spawn } from "child_process";
 import { rm, writeFile, readdir, readFile, stat, mkdir, rename, copyFile, appendFile } from "fs/promises";
 import * as os from "os";
@@ -1301,7 +1301,70 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
         context: z.string().optional().describe("Additional context or data for the agent."),
         allow_tools: z.boolean().optional().describe("If true, the secondary agent can use tools like Web Search (DuckDuckGo, Wikipedia), File System (Read/List), and Code Execution (if enabled in settings). Default: false."),
     },
-    implementation: createSafeToolImplementation(\n        async ({ task, agent_role = \"general\", context = \"\", allow_tools = false }) => {\n            let endpoint = pluginConfig.get(\"secondaryAgentEndpoint\");\n            let modelId = pluginConfig.get(\"secondaryModelId\");\n            const useMainModel = pluginConfig.get(\"useMainModelForSubAgent\");\n            \n            if (useMainModel) {\n                endpoint = \"http://localhost:1234/v1\";\n                // \"local-model\" is the standard placeholder in LM Studio to target the currently loaded model\n                modelId = \"local-model\"; \n            }\n\n            const subAgentProfilesStr = pluginConfig.get(\"subAgentProfiles\");\n            const debugMode = pluginConfig.get(\"enableDebugMode\");\n            const autoSave = pluginConfig.get(\"subAgentAutoSave\");\n            const showFullCode = pluginConfig.get(\"showFullCodeOutput\");\n            \n            const allowFileSystem = pluginConfig.get(\"subAgentAllowFileSystem\");\n            const allowWeb = pluginConfig.get(\"subAgentAllowWeb\");\n            const allowCode = pluginConfig.get(\"subAgentAllowCode\");\n\n            if (!enableSecondary) return { error: \"Secondary agent is disabled in settings.\" };\n\n            // 1. Load Base Instructions & Profile\n            let systemPrompt = \"You are a helpful assistant.\";\n            \n            // Try to load generic instructions\n            const instructionsPath = join(currentWorkingDirectory, \"SUB_AGENT_INSTRUCTIONS.md\");\n            try {\n                const instructions = await readFile(instructionsPath, \"utf-8\");\n                if (instructions.trim()) {\n                    systemPrompt = instructions;\n                }\n            } catch (e) { }\n\n            // Append specific profile if available\n            try {\n                const profiles = JSON.parse(subAgentProfilesStr);\n                if (profiles[agent_role]) {\n                    systemPrompt += `\\n\\n## Your Persona\\n${profiles[agent_role]}`;\n                }\n            } catch (jsonErr) { }\n\n            // 2. Determine Allowed Tools & Append to Prompt\n            let toolsReminder = \"\";\n            if (allow_tools) {\n                const allowedTools = [];\n                if (allowFileSystem) allowedTools.push(\"read_file\", \"list_directory\", \"save_file\", \"replace_text_in_file\", \"delete_files_by_pattern\", \"rag_local_files\", \"search_file_content\");\n                if (allowWeb) allowedTools.push(\"wikipedia_search\", \"duckduckgo_search\", \"fetch_web_content\", \"rag_web_content\");\n                if (allowCode) allowedTools.push(\"run_python\", \"run_javascript\");\n\n                if (allowedTools.length > 0) {\n                    const toolsList = allowedTools.join(\", \");\n                    systemPrompt += `\\n\\n## Allowed Tools\\nYou have access to the following tools via JSON output: ${toolsList}.\\nRefer to the \"Tool Usage\" section above for the JSON format.\\n`;\n                    toolsReminder = `\\n\\n[SYSTEM REMINDER: You have access to tools: ${toolsList}. If you need information you don\'t have, USE A TOOL. Do not refuse.]`;\n                }\n            }\n\n\n\n            // Helper to run an agent loop\n            const runAgentLoop = async (\n                role: string, \n                taskPrompt: string, \n                contextData: string, \n                loopLimit: number = 8,\n                forceTools: boolean = false,\n                currentWorkingDirectory: string // Added parameter\n            ) => {\n                let currentSystemPrompt = \"You are a helpful assistant.\";\n                \n                // Load Instructions\n                const instructionsPath = join(currentWorkingDirectory, \"SUB_AGENT_INSTRUCTIONS.md\");\n                try {\n                    const instructions = await readFile(instructionsPath, \"utf-8\");\n                    if (instructions.trim()) currentSystemPrompt = instructions;\n                } catch (e) { }\n\n                // Inject Project Info\n                const infoPath = join(currentWorkingDirectory, \"beledarian_info.md\");\n                try {\n                    const projectInfo = await readFile(infoPath, \"utf-8\");\n                    if (projectInfo.trim()) {\n                        currentSystemPrompt += `\\n\\n## ? Current Project Info (beledarian_info.md)\\n${projectInfo}\\n`;\n                    }\n                } catch (e) { }\n\n                // Add current working directory to system prompt for context\n                currentSystemPrompt += `\\n\\n## ? Current Workspace\\nYour current working directory is: \`${currentWorkingDirectory}\`\\nAlways assume relative paths are from this directory.`
+    implementation: createSafeToolImplementation(
+        async ({ task, agent_role = "general", context = "", allow_tools = false }) => {
+            let endpoint = pluginConfig.get("secondaryAgentEndpoint");
+            let modelId = pluginConfig.get("secondaryModelId");
+            const useMainModel = pluginConfig.get("useMainModelForSubAgent");
+            
+            if (useMainModel) {
+                endpoint = "http://localhost:1234/v1";
+                // "local-model" is the standard placeholder in LM Studio to target the currently loaded model
+                modelId = "local-model"; 
+            }
+
+            const subAgentProfilesStr = pluginConfig.get("subAgentProfiles");
+            const debugMode = pluginConfig.get("enableDebugMode");
+            const autoSave = pluginConfig.get("subAgentAutoSave");
+            const showFullCode = pluginConfig.get("showFullCodeOutput");
+            
+            const allowFileSystem = pluginConfig.get("subAgentAllowFileSystem");
+            const allowWeb = pluginConfig.get("subAgentAllowWeb");
+            const allowCode = pluginConfig.get("subAgentAllowCode");
+
+            if (!enableSecondary) return { error: "Secondary agent is disabled in settings." };
+
+            // Helper to run an agent loop
+            const runAgentLoop = async (
+                role: string, 
+                taskPrompt: string, 
+                contextData: string, 
+                loopLimit: number = 8,
+                forceTools: boolean = false,
+                currentWorkingDirectory: string 
+            ) => {
+                let currentSystemPrompt = "You are a helpful assistant.";
+                
+                // Load Instructions
+                const instructionsPath = join(currentWorkingDirectory, "SUB_AGENT_INSTRUCTIONS.md");
+                try {
+                    const instructions = await readFile(instructionsPath, "utf-8");
+                    if (instructions.trim()) currentSystemPrompt = instructions;
+                } catch (e) { } // Ignore if instructions file doesn't exist
+
+                // Inject Project Info
+                const infoPath = join(currentWorkingDirectory, "beledarian_info.md");
+                try {
+                    const projectInfo = await readFile(infoPath, "utf-8");
+                    if (projectInfo.trim()) {
+                        currentSystemPrompt += `
+
+## ? Current Project Info (beledarian_info.md)
+${projectInfo}
+`;
+                    }
+                } catch (e) { } // Ignore if info file doesn't exist
+
+                // Add current working directory to system prompt for context
+                currentSystemPrompt += `
+
+## ? Current Workspace
+Your current working directory is: 
+
+${currentWorkingDirectory}
+Always assume relative paths are from this directory.`;
+
+                // Append specific profile if available
                 try {
                     const profiles = JSON.parse(subAgentProfilesStr);
                     if (profiles[role]) {
