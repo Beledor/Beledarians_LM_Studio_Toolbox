@@ -9,6 +9,7 @@ export interface PluginState {
   currentWorkingDirectory: string;
   messageCount: number;
   dontAskToCompress: boolean;
+  subAgentDocsInjected: boolean;
 }
 
 export async function getPersistedState(): Promise<PluginState> {
@@ -20,12 +21,14 @@ export async function getPersistedState(): Promise<PluginState> {
       currentWorkingDirectory: state.currentWorkingDirectory ?? DEFAULT_DIR,
       messageCount: state.messageCount ?? 0,
       dontAskToCompress: state.dontAskToCompress ?? false,
+      subAgentDocsInjected: state.subAgentDocsInjected ?? false,
     };
   } catch (error) {
     return {
       currentWorkingDirectory: DEFAULT_DIR,
       messageCount: 0,
       dontAskToCompress: false,
+      subAgentDocsInjected: false,
     };
   }
 }

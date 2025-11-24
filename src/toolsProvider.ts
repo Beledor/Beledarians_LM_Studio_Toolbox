@@ -2,7 +2,7 @@ import { text, tool, type Tool, type ToolsProvider, type LMStudioClient } from "
 import { spawn } from "child_process";
 import { rm, writeFile, readdir, readFile, stat, mkdir, rename, copyFile, appendFile } from "fs/promises";
 import * as os from "os";
-import { join, resolve, dirname } from "path";
+import { join, resolve, dirname, isAbsolute } from "path";
 import { z } from "zod";
 import { pluginConfigSchematics } from "./config";
 import { findLMStudioHome } from "./findLMStudioHome";
@@ -401,10 +401,13 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
 
   const listDirectoryTool = tool({
     name: "list_directory",
-    description: "List the files and directories in the current working directory.",
-    parameters: {},
-    implementation: async () => {
-      const files = await readdir(currentWorkingDirectory);
+    description: "List the files and directories in the current working directory or a specified subdirectory.",
+    parameters: {
+      path: z.string().optional().describe("The path to the directory to list. Defaults to current working directory."),
+    },
+    implementation: async ({ path }) => {
+      const targetPath = path ? validatePath(currentWorkingDirectory, path) : currentWorkingDirectory;
+      const files = await readdir(targetPath);
       return {
         files,
       };
@@ -1298,106 +1301,22 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
         context: z.string().optional().describe("Additional context or data for the agent."),
         allow_tools: z.boolean().optional().describe("If true, the secondary agent can use tools like Web Search (DuckDuckGo, Wikipedia), File System (Read/List), and Code Execution (if enabled in settings). Default: false."),
     },
-    implementation: createSafeToolImplementation(
-        async ({ task, agent_role = "general", context = "", allow_tools = false }) => {
-            let endpoint = pluginConfig.get("secondaryAgentEndpoint");
-            let modelId = pluginConfig.get("secondaryModelId");
-            const useMainModel = pluginConfig.get("useMainModelForSubAgent");
-            
-            if (useMainModel) {
-                endpoint = "http://localhost:1234/v1";
-                // "local-model" is the standard placeholder in LM Studio to target the currently loaded model
-                modelId = "local-model"; 
-            }
-
-            const subAgentProfilesStr = pluginConfig.get("subAgentProfiles");
-            const debugMode = pluginConfig.get("enableDebugMode");
-            const autoSave = pluginConfig.get("subAgentAutoSave");
-            const showFullCode = pluginConfig.get("showFullCodeOutput");
-            
-            const allowFileSystem = pluginConfig.get("subAgentAllowFileSystem");
-            const allowWeb = pluginConfig.get("subAgentAllowWeb");
-            const allowCode = pluginConfig.get("subAgentAllowCode");
-
-            if (!enableSecondary) return { error: "Secondary agent is disabled in settings." };
-
-            // 1. Load Base Instructions & Profile
-            let systemPrompt = "You are a helpful assistant.";
-            
-            // Try to load generic instructions
-            const instructionsPath = join(currentWorkingDirectory, "SUB_AGENT_INSTRUCTIONS.md");
-            try {
-                const instructions = await readFile(instructionsPath, "utf-8");
-                if (instructions.trim()) {
-                    systemPrompt = instructions;
-                }
-            } catch (e) { }
-
-            // Append specific profile if available
-            try {
-                const profiles = JSON.parse(subAgentProfilesStr);
-                if (profiles[agent_role]) {
-                    systemPrompt += `\n\n## Your Persona\n${profiles[agent_role]}`;
-                }
-            } catch (jsonErr) { }
-
-            // 2. Determine Allowed Tools & Append to Prompt
-            let toolsReminder = "";
-            if (allow_tools) {
-                const allowedTools = [];
-                if (allowFileSystem) allowedTools.push("read_file", "list_directory", "save_file", "replace_text_in_file", "delete_files_by_pattern", "rag_local_files");
-                if (allowWeb) allowedTools.push("wikipedia_search", "duckduckgo_search", "fetch_web_content", "rag_web_content");
-                if (allowCode) allowedTools.push("run_python", "run_javascript");
-
-                if (allowedTools.length > 0) {
-                    const toolsList = allowedTools.join(", ");
-                    systemPrompt += `\n\n## Allowed Tools\nYou have access to the following tools via JSON output: ${toolsList}.\nRefer to the "Tool Usage" section above for the JSON format.\n`;
-                    toolsReminder = `\n\n[SYSTEM REMINDER: You have access to tools: ${toolsList}. If you need information you don't have, USE A TOOL. Do not refuse.]`;
-                }
-            }
-
-
-
-            // Helper to run an agent loop
-            const runAgentLoop = async (
-                role: string, 
-                taskPrompt: string, 
-                contextData: string, 
-                loopLimit: number = 8
-            ) => {
-                let currentSystemPrompt = "You are a helpful assistant.";
-                
-                // Load Instructions
-                const instructionsPath = join(currentWorkingDirectory, "SUB_AGENT_INSTRUCTIONS.md");
-                try {
-                    const instructions = await readFile(instructionsPath, "utf-8");
-                    if (instructions.trim()) currentSystemPrompt = instructions;
-                } catch (e) { }
-
-                // Inject Project Info
-                const infoPath = join(currentWorkingDirectory, "beledarian_info.md");
-                try {
-                    const projectInfo = await readFile(infoPath, "utf-8");
-                    if (projectInfo.trim()) {
-                        currentSystemPrompt += `\n\n## ? Current Project Info (beledarian_info.md)\n${projectInfo}\n`;
-                    }
-                } catch (e) { }
-
-                // Load Profile
+    implementation: createSafeToolImplementation(\n        async ({ task, agent_role = \"general\", context = \"\", allow_tools = false }) => {\n            let endpoint = pluginConfig.get(\"secondaryAgentEndpoint\");\n            let modelId = pluginConfig.get(\"secondaryModelId\");\n            const useMainModel = pluginConfig.get(\"useMainModelForSubAgent\");\n            \n            if (useMainModel) {\n                endpoint = \"http://localhost:1234/v1\";\n                // \"local-model\" is the standard placeholder in LM Studio to target the currently loaded model\n                modelId = \"local-model\"; \n            }\n\n            const subAgentProfilesStr = pluginConfig.get(\"subAgentProfiles\");\n            const debugMode = pluginConfig.get(\"enableDebugMode\");\n            const autoSave = pluginConfig.get(\"subAgentAutoSave\");\n            const showFullCode = pluginConfig.get(\"showFullCodeOutput\");\n            \n            const allowFileSystem = pluginConfig.get(\"subAgentAllowFileSystem\");\n            const allowWeb = pluginConfig.get(\"subAgentAllowWeb\");\n            const allowCode = pluginConfig.get(\"subAgentAllowCode\");\n\n            if (!enableSecondary) return { error: \"Secondary agent is disabled in settings.\" };\n\n            // 1. Load Base Instructions & Profile\n            let systemPrompt = \"You are a helpful assistant.\";\n            \n            // Try to load generic instructions\n            const instructionsPath = join(currentWorkingDirectory, \"SUB_AGENT_INSTRUCTIONS.md\");\n            try {\n                const instructions = await readFile(instructionsPath, \"utf-8\");\n                if (instructions.trim()) {\n                    systemPrompt = instructions;\n                }\n            } catch (e) { }\n\n            // Append specific profile if available\n            try {\n                const profiles = JSON.parse(subAgentProfilesStr);\n                if (profiles[agent_role]) {\n                    systemPrompt += `\\n\\n## Your Persona\\n${profiles[agent_role]}`;\n                }\n            } catch (jsonErr) { }\n\n            // 2. Determine Allowed Tools & Append to Prompt\n            let toolsReminder = \"\";\n            if (allow_tools) {\n                const allowedTools = [];\n                if (allowFileSystem) allowedTools.push(\"read_file\", \"list_directory\", \"save_file\", \"replace_text_in_file\", \"delete_files_by_pattern\", \"rag_local_files\", \"search_file_content\");\n                if (allowWeb) allowedTools.push(\"wikipedia_search\", \"duckduckgo_search\", \"fetch_web_content\", \"rag_web_content\");\n                if (allowCode) allowedTools.push(\"run_python\", \"run_javascript\");\n\n                if (allowedTools.length > 0) {\n                    const toolsList = allowedTools.join(\", \");\n                    systemPrompt += `\\n\\n## Allowed Tools\\nYou have access to the following tools via JSON output: ${toolsList}.\\nRefer to the \"Tool Usage\" section above for the JSON format.\\n`;\n                    toolsReminder = `\\n\\n[SYSTEM REMINDER: You have access to tools: ${toolsList}. If you need information you don\'t have, USE A TOOL. Do not refuse.]`;\n                }\n            }\n\n\n\n            // Helper to run an agent loop\n            const runAgentLoop = async (\n                role: string, \n                taskPrompt: string, \n                contextData: string, \n                loopLimit: number = 8,\n                forceTools: boolean = false,\n                currentWorkingDirectory: string // Added parameter\n            ) => {\n                let currentSystemPrompt = \"You are a helpful assistant.\";\n                \n                // Load Instructions\n                const instructionsPath = join(currentWorkingDirectory, \"SUB_AGENT_INSTRUCTIONS.md\");\n                try {\n                    const instructions = await readFile(instructionsPath, \"utf-8\");\n                    if (instructions.trim()) currentSystemPrompt = instructions;\n                } catch (e) { }\n\n                // Inject Project Info\n                const infoPath = join(currentWorkingDirectory, \"beledarian_info.md\");\n                try {\n                    const projectInfo = await readFile(infoPath, \"utf-8\");\n                    if (projectInfo.trim()) {\n                        currentSystemPrompt += `\\n\\n## ? Current Project Info (beledarian_info.md)\\n${projectInfo}\\n`;\n                    }\n                } catch (e) { }\n\n                // Add current working directory to system prompt for context\n                currentSystemPrompt += `\\n\\n## ? Current Workspace\\nYour current working directory is: \`${currentWorkingDirectory}\`\\nAlways assume relative paths are from this directory.`
                 try {
                     const profiles = JSON.parse(subAgentProfilesStr);
                     if (profiles[role]) {
                         currentSystemPrompt += `\n\n## Your Persona\n${profiles[role]}`;
                     } else if (role === "reviewer") {
-                        currentSystemPrompt += `\n\n## Your Persona\nYou are a Senior Code Reviewer. Your job is to analyze code, find bugs, security issues, or logic errors, and FIX them. If you find an error, you MUST use the 'save_file' tool to overwrite the file with the corrected version. DO NOT just output the fixed code text.`;
+                        currentSystemPrompt += `\n\n## Your Persona\nYou are a Senior Code Reviewer. Your job is to analyze code, find bugs, security issues, or logic errors, and FIX them.\n\nIMPORTANT: To fix a file, you MUST use the 'save_file' tool with the complete, corrected content. DO NOT use 'container.exec' or diff formats. Just overwrite the file with the fixed version using 'save_file'.`;
                     }
                 } catch (jsonErr) { }
 
                 // Append Tools
                 let toolsReminder = "";
-                if (allow_tools) {
+                const toolsEnabled = allow_tools || forceTools;
+                if (toolsEnabled) {
                     const allowedTools = [];
-                    if (allowFileSystem) allowedTools.push("read_file", "list_directory", "save_file", "rag_local_files");
+                    if (allowFileSystem) allowedTools.push("read_file", "list_directory", "save_file", "replace_text_in_file", "delete_files_by_pattern", "rag_local_files", "search_file_content");
                     if (allowWeb) allowedTools.push("wikipedia_search", "duckduckgo_search", "fetch_web_content", "rag_web_content");
                     if (allowCode) allowedTools.push("run_python", "run_javascript");
 
@@ -1438,7 +1357,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
                         // Cleanup
                         content = content.replace(/<\|.*?\|>/g, "").trim();
 
-                        if (!allow_tools) return { response: content, filesModified };
+                        if (!toolsEnabled) return { response: content, filesModified };
 
                         // Tool use check
                         let toolCall = null;
@@ -1459,36 +1378,49 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
 
                             const jsonMatch = trimmed.match(/\{[\s\S]*\}/);
                             if (jsonMatch) {
-                                const parsed = JSON.parse(jsonMatch[0]);
-                                if (parsed.tool && parsed.args) toolCall = parsed;
-                            } else {
-                                // Glaive fallback
-                                // Allow dots in tool name (e.g. functions.save_file)
-                                const toolNameMatch = trimmed.match(/to=([a-zA-Z0-9_.]+)/);
-                                // Matches: <|message|> {...} OR json {...} OR just {...}
-                                // Capture from the first '{' to the end of the string to handle nested braces in code
-                                const argsMatch = trimmed.match(/(?:<\|message\|>|json|^|\s)(\{[\s\S]*)/);
-                                
-                                if (toolNameMatch && argsMatch) {
-                                    let toolName = toolNameMatch[1];
-                                    // Normalize "functions.save_file" -> "save_file"
-                                    if (toolName.startsWith("functions.")) {
-                                        toolName = toolName.replace("functions.", "");
+                                try {
+                                    const parsed = JSON.parse(jsonMatch[0]);
+                                    // Primary format: {"tool": "tool_name", "args": {...}}
+                                    if (parsed.tool && parsed.args) {
+                                        toolCall = parsed;
                                     }
+                                    // Secondary format: {"name": "tool_name", "arguments": {...}} - commonly seen from some models
+                                    else if (parsed.name && parsed.arguments) {
+                                        let toolName = parsed.name;
+                                        let args = parsed.arguments; // Extract arguments directly
+                                        
+                                        // Apply save_file specific argument mapping if necessary for this format
+                                        if (toolName === "save_file") {
+                                            // These mappings are for if args.path or args.data exist in the nested arguments
+                                            if (args.path && !args.file_name) args.file_name = args.path;
+                                            if (args.data && !args.content) args.content = args.data;
+                                        }
+                                        toolCall = { tool: toolName, args: args };
+                                    }
+                                    // Fallback format: just the args object, tool name from "to=..."
+                                    else {
+                                        const toolNameMatch = trimmed.match(/to=([a-zA-Z0-9_.]+)/);
+                                        if (toolNameMatch) {
+                                            let toolName = toolNameMatch[1];
+                                            if (toolName.startsWith("functions.")) toolName = toolName.replace("functions.", "");
 
-                                    let args = JSON.parse(argsMatch[1]);
-                                    
-                                    // Map disparate args to expected schema if necessary
-                                    if (toolName === "save_file") {
-                                        // Map 'path'/'data' to 'file_name'/'content'
-                                        if (args.path) args.file_name = args.path;
-                                        if (args.data) args.content = args.data;
+                                            let args = parsed; // Here 'parsed' is expected to be just the arguments object
+
+                                            // Handle Array args for save_file (batch mode)
+                                            if (toolName === "save_file" && Array.isArray(args)) {
+                                                args = { files: args };
+                                            }
+
+                                            // Map 'path' to 'file_name' for save_file (for the flattened 'args' object)
+                                            if (toolName === "save_file") {
+                                                if (args.path && !args.file_name) args.file_name = args.path;
+                                                if (args.data && !args.content) args.content = args.data;
+                                            }
+                                            toolCall = { tool: toolName, args: args };
+                                        }
                                     }
-                                    
-                                    toolCall = {
-                                        tool: toolName,
-                                        args: args
-                                    };
+                                } catch (e) {
+                                    // JSON parsing failed, toolCall remains null
                                 }
                             }
                         } catch (e) { }
@@ -1600,8 +1532,17 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
                             msgList.push({ role: "user", content: `Tool Output: ${toolResult}` });
                             loops++;
                         } else {
-                            finalContent = content;
-                            break; // Done
+                            // NO TOOL CALL DETECTED
+                            // Check for explicit completion phrase or strict loop limit
+                            if (content.includes("TASK_COMPLETED") || loops >= loopLimit - 1) {
+                                finalContent = content;
+                                break; // Done
+                            } else {
+                                // Keep-Alive: Force the agent to continue
+                                msgList.push({ role: "assistant", content: content });
+                                msgList.push({ role: "system", content: "SYSTEM NOTICE: You did not call a tool. If you are finished, output 'TASK_COMPLETED'. If not, please USE A TOOL (e.g., save_file, read_file) to proceed." });
+                                loops++;
+                            }
                         }
                     } catch (err: any) { return { error: err.message, filesModified }; }
                 }
@@ -1613,35 +1554,90 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
                     const codeBlockRegex = /```\s*(\w+)?\s*([\s\S]*?)```/g;
                     // Get all matches from the ORIGINAL string
                     const matches = Array.from(finalContent.matchAll(codeBlockRegex));
+                    const processedFiles = new Set<string>();
                     
                     // Iterate BACKWARDS to preserve indices for replacement
                     for (let i = matches.length - 1; i >= 0; i--) {
                         const match = matches[i];
                         const fullBlock = match[0];
-                        const lang = match[1] || "txt";
+                        const lang = (match[1] || "txt").toLowerCase();
                         const code = match[2];
                         const index = match.index || 0;
                         
-                        if (code.trim().length > 50) { 
+                        let handledAsBatch = false;
+
+                        // Smart JSON Unpacking
+                        if (lang === "json") {
+                            try {
+                                const parsed = JSON.parse(code);
+                                if (Array.isArray(parsed)) {
+                                    let extractedCount = 0;
+                                    for (const item of parsed) {
+                                        const fName = item.path || item.file_name || item.name;
+                                        const fContent = item.content || item.data || item.code;
+                                        
+                                        if (fName && typeof fName === "string" && fContent && typeof fContent === "string") {
+                                            const fpath = validatePath(currentWorkingDirectory, fName);
+                                            await mkdir(dirname(fpath), { recursive: true });
+                                            await writeFile(fpath, fContent, "utf-8");
+                                            filesModified.push(fName);
+                                            processedFiles.add(fName);
+                                            extractedCount++;
+                                        }
+                                    }
+
+                                    if (extractedCount > 0) {
+                                        handledAsBatch = true;
+                                        const replacement = `\n[System: Successfully extracted and saved ${extractedCount} files from JSON block.]\n`;
+                                        finalContent = finalContent.slice(0, index) + replacement + finalContent.slice(index + fullBlock.length);
+                                    }
+                                }
+                            } catch (e) {
+                                // Not valid JSON or not the structure we want, fall through to normal save
+                            }
+                        }
+
+                        if (!handledAsBatch && code.trim().length > 50) { 
                             // Lookback in the ORIGINAL string (match.input is safe)
-                            const lookback = finalContent.substring(Math.max(0, index - 200), index);
+                            const lookback = finalContent.substring(Math.max(0, index - 500), index);
                             
                             // Regex to find filenames like `### src/App.tsx`, `**App.tsx**`, `filename: App.tsx`
-                            // We look for common extensions
-                            const nameMatch = lookback.match(/(?:`|\*\*|###|filename:|file:)[\s\S]*?([\w\-\/\\.]+\.(?:tsx|ts|jsx|js|html|css|json|md|py|sh|java|rs|go|sql|yaml|yml|c|cpp|h|hpp))/i);
+                            const nameMatch = lookback.match(/(?:`|\*\*|###|filename:|file:)[\s\S]*?([\w\-\/\\.]+\.(?:tsx|ts|jsx|js|html|css|json|md|py|sh|java|rs|go|sql|yaml|yml|c|cpp|h|hpp|txt))/i);
                             
                             let fileName = "";
                             if (nameMatch) {
                                 fileName = nameMatch[1].trim();
-                            } else {
-                                const extMap: {[key: string]: string} = { 
-                                    python: "py", javascript: "js", typescript: "ts", tsx: "tsx", jsx: "jsx",
-                                    html: "html", css: "css", json: "json", sh: "sh", bash: "sh",
-                                    markdown: "md", md: "md", yaml: "yaml", yml: "yml",
-                                    sql: "sql", rust: "rs", go: "go", java: "java", c: "c", cpp: "cpp"
-                                };
-                                const ext = extMap[lang.toLowerCase()] || lang || "txt";
-                                fileName = `auto_gen_${Date.now()}_${i}.${ext}`;
+                            }
+
+                            // Fallback: Check the first line of the code block for a filename comment
+                            // e.g. // src/App.tsx or # filename: utils.py
+                            if (!fileName) {
+                                const firstLine = code.split('\n')[0].trim();
+                                const commentMatch = firstLine.match(/^(?:\/\/|#|<!--|;)\s*(?:filename:|file:)?\s*([\w\-\/\\.]+\.(?:tsx|ts|jsx|js|html|css|json|md|py|sh|java|rs|go|sql|yaml|yml|c|cpp|h|hpp|txt))/i);
+                                if (commentMatch) {
+                                    fileName = commentMatch[1].trim();
+                                }
+                            }
+
+                            // Block Shell/Console snippets from being auto-saved as "auto_gen" files
+                            // unless there is an EXPLICIT filename match above.
+                            const isShell = ["bash", "sh", "cmd", "powershell", "console", "zsh", "terminal"].includes(lang);
+                            
+                            if (isShell && !fileName) {
+                                continue;
+                            }
+
+                            // If we didn't find a filename, skip saving this block.
+                            // This prevents "auto_gen" files from cluttering the workspace.
+                            if (!fileName) {
+                                continue;
+                            }
+
+                            // Deduplication: If we already processed this file in this turn, skip saving it again 
+                            // (or rather, assume the LAST occurrence we are processing is the definitive one, 
+                            // so we mark it as processed. If we encounter it AGAIN (earlier in text), we skip).
+                            if (processedFiles.has(fileName)) {
+                                continue;
                             }
 
                             const fpath = join(currentWorkingDirectory, fileName);
@@ -1650,13 +1646,15 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
                                 await mkdir(dirname(fpath), { recursive: true });
                                 await writeFile(fpath, code, "utf-8");
                                 filesModified.push(fileName);
+                                processedFiles.add(fileName);
                                 
                                 // Replace the block in finalContent using string slicing with the original index
-                                // This works because we are going backwards
                                 const replacement = `\n[System: File '${fileName}' created successfully.]\n`;
                                 finalContent = finalContent.slice(0, index) + replacement + finalContent.slice(index + fullBlock.length);
                                 
-                            } catch (e) { }
+                            } catch (e) {
+                                console.error(`Failed to auto-save file ${fileName}:`, e);
+                            }
                         }
                     }
                 }
@@ -1682,7 +1680,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
             };
 
             // --- 1. Primary Agent Loop ---
-            const primaryResult = await runAgentLoop(agent_role, task, context);
+            const primaryResult = await runAgentLoop(agent_role, task, context, 8, false, currentWorkingDirectory);
             if (primaryResult.error) return { error: primaryResult.error };
 
             let finalResponse = primaryResult.response;
@@ -1701,7 +1699,7 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
                     } catch(e) {}
                 }
 
-                const debugResult = await runAgentLoop("reviewer", debugTask, debugContext, 5);
+                const debugResult = await runAgentLoop("reviewer", debugTask, debugContext, 5, true, currentWorkingDirectory);
                 
                 finalResponse += "\n\n--- Auto-Debug Report ---\n" + (debugResult.response || "Debug pass completed.");
                 if (debugResult.filesModified.length > 0) {
@@ -1711,14 +1709,18 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
 
             // Append generated file list for Main Agent visibility
             if (primaryResult.filesModified.length > 0) {
-                const fullPaths = primaryResult.filesModified.map(f => join(currentWorkingDirectory, f));
+                const fullPaths = primaryResult.filesModified.map(f => {
+                   if (isAbsolute(f)) return f;
+                   return join(currentWorkingDirectory, f);
+                });
                 finalResponse += `\n\n[GENERATED_FILES]: ${fullPaths.join(", ")}`;
 
                 if (showFullCode) {
                     finalResponse += `\n\n### Generated Code Content:\n`;
                     for (const f of primaryResult.filesModified) {
                         try {
-                            const content = await readFile(join(currentWorkingDirectory, f), "utf-8");
+                            const fpath = isAbsolute(f) ? f : join(currentWorkingDirectory, f);
+                            const content = await readFile(fpath, "utf-8");
                             const ext = f.split('.').pop() || 'txt';
                             finalResponse += `\n**${f}**\n\`\`\`${ext}\n${content}\n\`\`\`\n`;
                         } catch (e) {}

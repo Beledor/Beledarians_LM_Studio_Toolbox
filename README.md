@@ -13,6 +13,12 @@ This project is a plugin for [LM Studio](https://lmstudio.ai/) that provides a r
 - **Batch Processing:** `save_file` supports creating multiple files in one go.
 - **Cleanup:** Use `delete_files_by_pattern` to wipe temporary files instantly.
 
+### ? Recent Updates
+- **Smart Context Injection:** `subagent_docs.md` is automatically loaded into the context, ensuring the Main Agent understands how to delegate effectively.
+- **Enhanced Reporting:** Fixed file path reporting in `consult_secondary_agent` and clarified "Hidden Code" success messages.
+- **Project Tracking:** Sub-agents now enforce the creation and maintenance of `beledarian_info.md` to track project state.
+- **Strict Naming:** Improved instructions to ensure sub-agents use correct file extensions (e.g., `.json` vs `.js`).
+
 ### ? Autonomous Agents
 - **Secondary Agent:** Delegate complex tasks (coding, summarization) to a second local model/server.
 - **Auto-Save:** When the sub-agent generates code, the system **automatically detects and saves it** to your disk. No more copy-pasting!

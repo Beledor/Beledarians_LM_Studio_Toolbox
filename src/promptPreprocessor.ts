@@ -76,16 +76,13 @@ export async function promptPreprocessor(ctl: PromptPreprocessorController, user
   let delegationHint = "";
 
   if (frequency === "always") {
-      delegationHint = "\n\n**SYSTEM MANDATE:** You MUST delegate ALL information retrieval, news summaries, and **ALL coding tasks** (creation, editing, refactoring) to the secondary agent. Do NOT write code or use search tools yourself. Use `consult_secondary_agent` with `allow_tools: true`.\n\n**PRE-DELEGATION CHECKLIST:**\n1. Run `list_directory` to see what files already exist.\n2. Read `beledarian_info.md` or `README.md` if present to understand the project state.\n3. ONLY THEN delegate the task, providing the context you found.";
+      delegationHint = "\n\n**SYSTEM MANDATE:** You MUST delegate ALL information retrieval, news summaries, and **ALL coding tasks** (creation, editing, refactoring) to the secondary agent. Do NOT write code or use search tools yourself. Use `consult_secondary_agent` with `allow_tools: true`.\n\n**PRE-DELEGATION CHECKLIST:**\n1. Run `list_directory` to see what files already exist.\n2. Read `beledarian_info.md` or `README.md` if present.\n3. CALL `consult_secondary_agent` with the context.";
   } else if (frequency === "when_useful") {
-      delegationHint = "\n\n**SYSTEM ADVICE:** For 'news', 'current events', or **ANY coding project** (generating apps, multi-file edits), you are STRONGLY ADVISED to delegate to the secondary agent (role: 'coder' or 'summarizer') with `allow_tools: true`. Do not write complex code yourself.\n\n**PRE-DELEGATION CHECKLIST:**\n1. Run `list_directory` to see what files already exist.\n2. Read `beledarian_info.md` or `README.md` if present.\n3. Provide this context to the sub-agent to avoid overwriting work.\n";
+      delegationHint = "\n\n**SYSTEM ADVICE:** For complex tasks (e.g., 'create an app', 'refactor this module', 'research and summarize'), you **MUST** delegate to the secondary agent using `consult_secondary_agent` (set `allow_tools: true`).\n\n**Why Delegate?**\n- The Sub-Agent has a specialized loop for coding and debugging.\n- It will automatically SAVE all files. You do not need to do it.\n\n**How to Delegate:**\n1. Gather context (`list_directory`, `read_file`).\n2. Call `consult_secondary_agent` with a clear task description and the context you found.\n";
       
       if (debugMode) {
-          delegationHint += "Note: The 'Auto-Debug' feature is ACTIVE. Delegating code to the sub-agent will automatically verify and fix bugs. This is much safer than writing it yourself.\n";
+          delegationHint += "Note: 'Auto-Debug' is ACTIVE. The Sub-Agent will verify and fix its own code. This is the safest way to generate code.\n";
       }
-      
-      delegationHint += "\n**New Project Protocol:** If creating a new app, instruct the sub-agent to create a specific subfolder and research documentation first.\n";
-      delegationHint += "**Efficient Edits:** Use `replace_text_in_file` for small changes.\n";
 
   } else if (frequency === "hard_tasks") {
       delegationHint = "\n\n**Delegation Hint:** Only delegate EXTREMELY complex or computationally expensive tasks to the secondary agent. Handle standard queries and file reads yourself.\n";
@@ -94,6 +91,31 @@ export async function promptPreprocessor(ctl: PromptPreprocessorController, user
   // Append the hint to the user message (effective system instruction for this turn)
   if (delegationHint) {
       currentContent += delegationHint;
+  }
+
+  // --- Sub-Agent Documentation Injection (Startup OR On-Enable) ---
+  const enableSecondary = pluginConfig.get("enableSecondaryAgent");
+  const state = await getPersistedState();
+
+  if (enableSecondary && !state.subAgentDocsInjected) {
+      try {
+          const { currentWorkingDirectory } = state;
+          const subAgentDocsPath = join(currentWorkingDirectory, "subagent_docs.md");
+          // Attempt to read the docs file
+          const docsContent = await readFile(subAgentDocsPath, "utf-8");
+          
+          if (docsContent && docsContent.trim().length > 0) {
+              // Prepend or Append? Append to ensure it's fresh context.
+              currentContent += `\n\n---\n\n${docsContent}\n\n---\n\n`;
+              ctl.debug("subagent_docs.md injected into context.");
+              
+              // Update state so we don't inject again for this session/workspace
+              state.subAgentDocsInjected = true;
+              await savePersistedState(state);
+          }
+      } catch (e) {
+          ctl.debug("subagent_docs.md not found or failed to load. Skipping injection.");
+      }
   }
 
   // 2. Tools Documentation & Memory Injection (Startup Only)
