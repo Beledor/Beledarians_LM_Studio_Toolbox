@@ -41,6 +41,16 @@ This project is a plugin for [LM Studio](https://lmstudio.ai/) that provides a r
 
 ## ? Installation
 
+The plugin can be installed using the following link:
+
+[https://lmstudio.ai/beledarian/beledarians-lm-studio-tools](https://lmstudio.ai/beledarian/beledarians-lm-studio-tools)
+
+Alternatively, you can install it manually for development purposes.
+
+### Development
+
+If you want to contribute to the development of this plugin, you can follow these steps:
+
 1.  **Clone the repository:**
     ```bash
     git clone https://github.com/Beledarian/Beledarians_LM_Studio_Toolbox.git
@@ -51,10 +61,11 @@ This project is a plugin for [LM Studio](https://lmstudio.ai/) that provides a r
     npm install
     ```
 3.  **Run in development mode:**
+    From within the project directory, run the following command:
     ```bash
     lms dev
     ```
-    LM Studio will detect the plugin.
+    This will start the plugin in development mode. LM Studio should automatically pick it up. Any changes you make to the source code will cause the plugin to automatically reload.
 
 ## ⚙️ Configuration
 
