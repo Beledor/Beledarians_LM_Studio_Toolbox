@@ -217,12 +217,32 @@ export const toolsProvider: ToolsProvider = async (ctl) => {
 
       try {
         if (ext === 'pdf') {
-          // Dynamically require pdf-parse to bypass strict TS ESM checks for this CommonJS lib
-          const pdfParse = require("pdf-parse");
+          // Polyfill DOMMatrix for pdf-parse v2 (required for node environment)
+          if (typeof global.DOMMatrix === 'undefined') {
+            (global as any).DOMMatrix = class DOMMatrix {
+              constructor(arg?: any) {
+                (this as any).a = 1; (this as any).b = 0; (this as any).c = 0; (this as any).d = 1; (this as any).e = 0; (this as any).f = 0;
+                if (Array.isArray(arg)) {
+                  (this as any).a = arg[0]; (this as any).b = arg[1];
+                  (this as any).c = arg[2]; (this as any).d = arg[3];
+                  (this as any).e = arg[4]; (this as any).f = arg[5];
+                }
+              }
+            };
+          }
+
+          // Dynamically require pdf-parse v2 class
+          const { PDFParse } = require("pdf-parse");
 
           const dataBuffer = await readFile(fpath);
-          const data = await pdfParse(dataBuffer);
-          return { content: data.text, metadata: data.info };
+          // Use new class-based API
+          const parser = new PDFParse({ data: dataBuffer });
+          const textResult = await parser.getText();
+          const infoResult = await parser.getInfo(); // Optional: get metadata
+
+          await parser.destroy(); // Cleanup
+
+          return { content: textResult.text, metadata: infoResult.info };
         } else if (ext === 'docx') {
           const mammoth = await import("mammoth");
           const result = await mammoth.extractRawText({ path: fpath });
